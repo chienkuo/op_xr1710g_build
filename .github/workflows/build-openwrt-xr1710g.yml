@@ -74,6 +74,7 @@ jobs:
       source_short: ${{ steps.source.outputs.source_short }}
       safe_ref: ${{ steps.source.outputs.safe_ref }}
       release_tag: ${{ steps.source.outputs.release_tag }}
+      cache_week: ${{ steps.source.outputs.cache_week }}
 
     steps:
       - name: Resolve build inputs
@@ -127,6 +128,7 @@ jobs:
           source_commit="$(git -C source-probe rev-parse FETCH_HEAD)"
           source_short="$(printf '%s' "${source_commit}" | cut -c1-12)"
           safe_ref="$(printf '%s' "${OPENWRT_REF}" | tr -cs 'A-Za-z0-9._-' '-' | sed 's/^-//;s/-$//')"
+          cache_week="$(date -u +%G-W%V)"
           if [ -z "${safe_ref}" ]; then
             safe_ref="${source_short}"
           fi
@@ -137,6 +139,7 @@ jobs:
             printf 'source_short=%s\n' "${source_short}"
             printf 'safe_ref=%s\n' "${safe_ref}"
             printf 'release_tag=%s\n' "${release_tag}"
+            printf 'cache_week=%s\n' "${cache_week}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Decide whether to build
@@ -241,6 +244,70 @@ jobs:
           restore-keys: |
             xr1710g-${{ runner.os }}-${{ needs.check-upstream.outputs.safe_ref }}-
             xr1710g-${{ runner.os }}-
+
+      - name: Restore weekly toolchain cache
+        id: toolchain-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ env.SOURCE_DIR }}/staging_dir/host
+            ${{ env.SOURCE_DIR }}/staging_dir/hostpkg
+            ${{ env.SOURCE_DIR }}/staging_dir/toolchain-*
+            ${{ env.SOURCE_DIR }}/build_dir/toolchain-*
+          key: xr1710g-toolchain-${{ runner.os }}-${{ needs.check-upstream.outputs.safe_ref }}-${{ needs.check-upstream.outputs.source_short }}-${{ needs.check-upstream.outputs.target_profile }}-${{ needs.check-upstream.outputs.cache_week }}
+          restore-keys: |
+            xr1710g-toolchain-${{ runner.os }}-${{ needs.check-upstream.outputs.safe_ref }}-${{ needs.check-upstream.outputs.source_short }}-${{ needs.check-upstream.outputs.target_profile }}-
+
+      - name: Import released toolchain when cache is unavailable
+        id: released-toolchain
+        if: ${{ steps.toolchain-cache.outputs.cache-hit != 'true' && steps.toolchain-cache.outputs.cache-matched-key == '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TOOLCHAIN_TAG_PREFIX: xr1710g-toolchain-${{ needs.check-upstream.outputs.safe_ref }}-${{ needs.check-upstream.outputs.source_short }}-
+        run: |
+          set -eu
+          mkdir -p toolchain-release
+          tag="$(gh release list --limit 100 --json tagName,isDraft --jq '.[] | select(.isDraft == false) | .tagName' | grep -m1 "^${TOOLCHAIN_TAG_PREFIX}" || true)"
+
+          if [ -z "${tag}" ]; then
+            echo "No released toolchain matched ${TOOLCHAIN_TAG_PREFIX}; falling back to normal build."
+            echo "release_toolchain_hit=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! gh release download "${tag}" --pattern 'openwrt-xr1710g-toolchain-*.tar.zst' --dir toolchain-release; then
+            echo "Release ${tag} has no downloadable toolchain archive; falling back to normal build."
+            echo "release_toolchain_hit=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          archive="$(find toolchain-release -maxdepth 1 -name 'openwrt-xr1710g-toolchain-*.tar.zst' -type f | sort | head -n 1)"
+          if [ -z "${archive}" ]; then
+            echo "No toolchain archive was downloaded; falling back to normal build."
+            echo "release_toolchain_hit=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          tar -I zstd -xf "${archive}" -C "${SOURCE_DIR}"
+          echo "Imported released toolchain from ${tag}: ${archive}"
+          echo "release_toolchain_hit=true" >> "$GITHUB_OUTPUT"
+          echo "release_toolchain_tag=${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Report toolchain import status
+        env:
+          CACHE_HIT: ${{ steps.toolchain-cache.outputs.cache-hit }}
+          CACHE_MATCHED_KEY: ${{ steps.toolchain-cache.outputs.cache-matched-key }}
+          RELEASE_TOOLCHAIN_HIT: ${{ steps.released-toolchain.outputs.release_toolchain_hit }}
+          RELEASE_TOOLCHAIN_TAG: ${{ steps.released-toolchain.outputs.release_toolchain_tag }}
+        run: |
+          set -eu
+          if [ "${CACHE_HIT}" = "true" ] || [ -n "${CACHE_MATCHED_KEY}" ]; then
+            echo "Imported prebuilt toolchain from cache: ${CACHE_MATCHED_KEY:-exact key}"
+          elif [ "${RELEASE_TOOLCHAIN_HIT}" = "true" ]; then
+            echo "Imported prebuilt toolchain from release: ${RELEASE_TOOLCHAIN_TAG}"
+          else
+            echo "No prebuilt toolchain was available; continuing with normal OpenWrt build."
+          fi
 
       - name: Update and install feeds
         working-directory: ${{ env.SOURCE_DIR }}
@@ -405,6 +472,7 @@ jobs:
             echo "OpenWrt commit: ${OPENWRT_SOURCE_COMMIT}"
             echo "Target: ${TARGET}/${SUBTARGET}"
             echo "Profile: ${TARGET_PROFILE}"
+            echo "Build time: $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %z')"
             echo "Wireless country default: ${WIRELESS_COUNTRY_CODE}"
             echo "5 GHz non-DFS default channel enabled: ${FIX_5G_CHANNEL}"
             echo
@@ -431,10 +499,11 @@ jobs:
         run: |
           set -eux
           tag="${RELEASE_TAG}"
+          build_time="$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %z')"
           if gh release view "${tag}" >/dev/null 2>&1; then
             echo "Release ${tag} already exists; skipping duplicate release."
             exit 0
           fi
           gh release create "${tag}" artifacts/xr1710g/* \
-            --title "OpenWrt XR1710G ${OPENWRT_REF} ${OPENWRT_SOURCE_SHORT}" \
+            --title "路由器固件 ${build_time}" \
             --notes-file artifacts/xr1710g/BUILDINFO.txt

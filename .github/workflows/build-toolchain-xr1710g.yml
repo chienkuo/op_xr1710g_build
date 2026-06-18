@@ -1,0 +1,274 @@
+name: Build OpenWrt XR1710G Toolchain
+
+on:
+  schedule:
+    - cron: "47 18 * * 0"
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/build-toolchain-xr1710g.yml
+  workflow_dispatch:
+    inputs:
+      openwrt_repo:
+        description: OpenWrt source repository
+        required: true
+        default: https://github.com/YYH2913/openwrt.git
+      openwrt_ref:
+        description: OpenWrt branch, tag, or commit
+        required: true
+        default: xr1710g
+      target_profile:
+        description: OpenWrt device profile
+        required: true
+        default: econet_xr1710g-ubi
+      extra_config:
+        description: Extra OpenWrt .config lines, one per line
+        required: false
+        default: ""
+      create_release:
+        description: Publish toolchain archive as a GitHub Release
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: openwrt-xr1710g-toolchain
+  cancel-in-progress: false
+
+env:
+  SOURCE_DIR: openwrt
+  TARGET: airoha
+  SUBTARGET: an7581
+  OPENWRT_REPO: ${{ inputs.openwrt_repo || 'https://github.com/YYH2913/openwrt.git' }}
+  OPENWRT_REF: ${{ inputs.openwrt_ref || 'xr1710g' }}
+  TARGET_PROFILE: ${{ inputs.target_profile || 'econet_xr1710g-ubi' }}
+  EXTRA_CONFIG: ${{ inputs.extra_config || '' }}
+  CREATE_RELEASE: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.create_release) || 'true' }}
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CCACHE_MAXSIZE: 2G
+
+jobs:
+  toolchain:
+    name: Toolchain ${{ inputs.target_profile || 'econet_xr1710g-ubi' }} @ ${{ inputs.openwrt_ref || 'xr1710g' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v4
+
+      - name: Free runner disk space
+        run: |
+          set -eux
+          timeout 180s sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc || true
+          timeout 60s docker system prune -af || true
+          df -h
+
+      - name: Install build dependencies
+        run: |
+          set -eux
+          sudo find /etc/apt/sources.list.d -type f \
+            \( -iname '*azure*' -o -iname '*microsoft*' \) \
+            -print -exec sudo sed -i 's/^[[:space:]]*deb /# disabled for OpenWrt build: deb /' {} \;
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang flex bison g++ gawk gcc-multilib \
+            g++-multilib gettext git libncurses-dev libssl-dev \
+            python3 python3-setuptools rsync swig unzip zlib1g-dev \
+            file wget curl ccache libelf-dev device-tree-compiler \
+            python3-ply python3-pyelftools qemu-utils zstd
+
+      - name: Clone OpenWrt source on Linux
+        id: source
+        run: |
+          set -eux
+          mkdir -p "${SOURCE_DIR}"
+          git -C "${SOURCE_DIR}" init
+          git -C "${SOURCE_DIR}" remote add origin "${OPENWRT_REPO}"
+          git -C "${SOURCE_DIR}" fetch --depth 1 origin "${OPENWRT_REF}"
+          git -C "${SOURCE_DIR}" checkout --force FETCH_HEAD
+          git -C "${SOURCE_DIR}" log -1 --oneline
+
+          source_commit="$(git -C "${SOURCE_DIR}" rev-parse HEAD)"
+          source_short="$(git -C "${SOURCE_DIR}" rev-parse --short=12 HEAD)"
+          safe_ref="$(printf '%s' "${OPENWRT_REF}" | tr -cs 'A-Za-z0-9._-' '-' | sed 's/^-//;s/-$//')"
+          cache_week="$(date -u +%G-W%V)"
+          if [ -z "${safe_ref}" ]; then
+            safe_ref="${source_short}"
+          fi
+
+          {
+            printf 'source_commit=%s\n' "${source_commit}"
+            printf 'source_short=%s\n' "${source_short}"
+            printf 'safe_ref=%s\n' "${safe_ref}"
+            printf 'cache_week=%s\n' "${cache_week}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Restore downloads and ccache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.SOURCE_DIR }}/dl
+            ${{ env.CCACHE_DIR }}
+          key: xr1710g-${{ runner.os }}-${{ steps.source.outputs.safe_ref }}-toolchain-${{ hashFiles('.github/workflows/build-toolchain-xr1710g.yml') }}
+          restore-keys: |
+            xr1710g-${{ runner.os }}-${{ steps.source.outputs.safe_ref }}-
+            xr1710g-${{ runner.os }}-
+
+      - name: Update and install feeds
+        working-directory: ${{ env.SOURCE_DIR }}
+        run: |
+          set -eux
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Add OpenClash package
+        working-directory: ${{ env.SOURCE_DIR }}
+        run: |
+          set -eux
+          git clone --depth 1 https://github.com/vernesong/OpenClash.git package/OpenClash
+
+      - name: Write toolchain build config
+        working-directory: ${{ env.SOURCE_DIR }}
+        run: |
+          set -eux
+          profile="${TARGET_PROFILE}"
+
+          cat > .config <<EOF
+          CONFIG_TARGET_${TARGET}=y
+          CONFIG_TARGET_${TARGET}_${SUBTARGET}=y
+          CONFIG_TARGET_${TARGET}_${SUBTARGET}_DEVICE_${profile}=y
+          CONFIG_ALL=y
+          CONFIG_ALL_KMODS=y
+          CONFIG_ALL_NONSHARED=y
+          CONFIG_BUILDBOT=y
+          CONFIG_CCACHE=y
+          CONFIG_DEVEL=y
+          CONFIG_IB=y
+          CONFIG_JSON_OVERVIEW_IMAGE_INFO=y
+          CONFIG_KERNEL_BUILD_DOMAIN="github-actions"
+          CONFIG_KERNEL_BUILD_USER="builder"
+          CONFIG_SDK=y
+          # CONFIG_PACKAGE_dnsmasq is not set
+          CONFIG_PACKAGE_bash=y
+          CONFIG_PACKAGE_ca-bundle=y
+          CONFIG_PACKAGE_irqbalance=y
+          CONFIG_PACKAGE_jq=y
+          CONFIG_PACKAGE_curl=y
+          CONFIG_PACKAGE_luci=y
+          CONFIG_PACKAGE_luci-app-openclash=y
+          CONFIG_PACKAGE_luci-app-firewall=y
+          CONFIG_PACKAGE_luci-app-package-manager=y
+          CONFIG_PACKAGE_luci-app-ttyd=y
+          CONFIG_PACKAGE_luci-app-irqbalance=y
+          CONFIG_PACKAGE_luci-compat=y
+          CONFIG_PACKAGE_luci-proto-ipv6=y
+          CONFIG_PACKAGE_luci-proto-ppp=y
+          CONFIG_PACKAGE_luci-theme-bootstrap=y
+          CONFIG_PACKAGE_nano=y
+          CONFIG_PACKAGE_dnsmasq-full=y
+          CONFIG_PACKAGE_ttyd=y
+          CONFIG_PACKAGE_wireless-regdb=y
+          # CONFIG_TARGET_ROOTFS_INITRAMFS is not set
+          EOF
+
+          if [ -n "${EXTRA_CONFIG}" ]; then
+            printf '%s\n' "${EXTRA_CONFIG}" >> .config
+          fi
+
+          grep -q "^CONFIG_TARGET_${TARGET}_${SUBTARGET}_DEVICE_${profile}=y$" .config
+          make defconfig
+          grep -q "^CONFIG_TARGET_${TARGET}_${SUBTARGET}_DEVICE_${profile}=y$" .config || {
+            echo "Device profile was not accepted by OpenWrt Kconfig: ${profile}"
+            grep "^CONFIG_TARGET_${TARGET}_${SUBTARGET}_DEVICE_" .config || true
+            exit 1
+          }
+
+      - name: Restore weekly toolchain cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.SOURCE_DIR }}/staging_dir/host
+            ${{ env.SOURCE_DIR }}/staging_dir/hostpkg
+            ${{ env.SOURCE_DIR }}/staging_dir/toolchain-*
+            ${{ env.SOURCE_DIR }}/build_dir/toolchain-*
+          key: xr1710g-toolchain-${{ runner.os }}-${{ steps.source.outputs.safe_ref }}-${{ steps.source.outputs.source_short }}-${{ env.TARGET_PROFILE }}-${{ steps.source.outputs.cache_week }}
+          restore-keys: |
+            xr1710g-toolchain-${{ runner.os }}-${{ steps.source.outputs.safe_ref }}-${{ steps.source.outputs.source_short }}-${{ env.TARGET_PROFILE }}-
+
+      - name: Compile tools and toolchain
+        working-directory: ${{ env.SOURCE_DIR }}
+        run: |
+          set -o pipefail
+          nproc
+          make -j"$(nproc)" tools/install toolchain/install || make -j1 V=s tools/install toolchain/install
+
+      - name: Collect toolchain archive
+        id: collect
+        run: |
+          set -eux
+          outdir="artifacts/toolchain"
+          archive="openwrt-xr1710g-toolchain-${{ steps.source.outputs.source_short }}-${{ steps.source.outputs.cache_week }}.tar.zst"
+          mkdir -p "${outdir}"
+
+          tar_paths=()
+          for path in \
+            staging_dir/host \
+            staging_dir/hostpkg \
+            staging_dir/toolchain-* \
+            build_dir/toolchain-*; do
+            if compgen -G "${SOURCE_DIR}/${path}" >/dev/null; then
+              tar_paths+=("${path}")
+            fi
+          done
+
+          if [ "${#tar_paths[@]}" -eq 0 ]; then
+            echo "No toolchain paths were found to archive."
+            exit 1
+          fi
+
+          (cd "${SOURCE_DIR}" && tar -I 'zstd -T0 -19' -cf "${GITHUB_WORKSPACE}/${outdir}/${archive}" "${tar_paths[@]}")
+
+          {
+            echo "OpenWrt repo: ${OPENWRT_REPO}"
+            echo "OpenWrt ref: ${OPENWRT_REF}"
+            echo "OpenWrt commit: ${{ steps.source.outputs.source_commit }}"
+            echo "Target: ${TARGET}/${SUBTARGET}"
+            echo "Profile: ${TARGET_PROFILE}"
+            echo "Build type: toolchain"
+            echo "Build time: $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %z')"
+            echo
+            echo "Restore this archive into the OpenWrt source root before running a firmware build."
+          } > "${outdir}/BUILDINFO-toolchain.txt"
+
+          (cd "${outdir}" && find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+          find "${outdir}" -maxdepth 1 -type f -printf '%f\n' | sort
+          echo "artifact_dir=${outdir}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload toolchain artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwrt-xr1710g-toolchain-${{ github.run_number }}
+          path: ${{ steps.collect.outputs.artifact_dir }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Create GitHub Release
+        if: ${{ env.CREATE_RELEASE == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eux
+          build_time="$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %z')"
+          tag="xr1710g-toolchain-${{ steps.source.outputs.safe_ref }}-${{ steps.source.outputs.source_short }}-${{ steps.source.outputs.cache_week }}"
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            echo "Release ${tag} already exists; skipping duplicate release."
+            exit 0
+          fi
+          gh release create "${tag}" artifacts/toolchain/* \
+            --title "toolchain ${build_time}" \
+            --notes-file artifacts/toolchain/BUILDINFO-toolchain.txt

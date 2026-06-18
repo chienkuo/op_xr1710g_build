@@ -17,7 +17,9 @@ The default build source is:
 4. Run `Build OpenWrt XR1710G` manually later if you want to override inputs.
 5. Download the `openwrt-xr1710g-*` artifact after the build completes.
 
-The workflow also runs once per day to check the configured OpenWrt branch. Scheduled runs skip the expensive build when the current upstream commit already has a matching release tag. Successful builds publish a GitHub Release containing firmware files and a `openwrt-xr1710g-packages.tar.zst` package archive.
+The firmware workflow also runs once per day to check the configured OpenWrt branch. Scheduled runs skip the expensive build when the current upstream commit already has a matching release tag. Successful firmware builds publish a GitHub Release containing firmware files and a `openwrt-xr1710g-packages.tar.zst` package archive.
+
+A separate toolchain workflow runs once per week. It builds the OpenWrt host tools and target toolchain, saves them into the GitHub Actions cache, and uploads a `openwrt-xr1710g-toolchain-*.tar.zst` archive to a GitHub Release. Firmware builds first try to restore that toolchain from cache, then from the matching toolchain release, and fall back to a normal build when no prebuilt toolchain is available.
 
 The expected system firmware artifact is the `*-sysupgrade.itb` file. For XR1710G HTTP Recovery, upload that `*-sysupgrade.itb` file.
 
@@ -26,6 +28,7 @@ The expected system firmware artifact is the `*-sysupgrade.itb` file. For XR1710
 - Do the OpenWrt source checkout and build on the Ubuntu runner. Avoid cloning the full OpenWrt tree on macOS case-insensitive filesystems.
 - The workflow enables OpenWrt buildbot-style package output with `CONFIG_ALL`, `CONFIG_ALL_KMODS`, and `CONFIG_ALL_NONSHARED`.
 - OpenClash is added from <https://github.com/vernesong/OpenClash> and selected into the firmware as `luci-app-openclash`.
+- Firmware release titles use `路由器固件 <build time>`. Toolchain release titles use `toolchain <build time>`.
 - `actions/cache` cache misses and Node runtime deprecation messages are runner warnings, not build failures.
 - OpenWrt dependency warnings from package Makefiles are expected when all packages are scanned. The actual failure signal is a later `ERROR` or failed workflow step.
 - The workflow adds a first-boot wireless defaults script that sets a valid country code, defaulting to `CN`.
