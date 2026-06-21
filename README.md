@@ -7,7 +7,7 @@ The default build source is:
 - ImmortalWrt tree: `https://github.com/immortalwrt/immortalwrt.git`
 - Branch: `openwrt-24.10`
 - Target: `airoha/an7581`
-- Device profile: `econet_xr1710g-ubi`
+- Device profile: `gemtek_xr1710g-ubi`
 
 ## Usage
 
@@ -30,7 +30,7 @@ The expected system firmware artifact is the `*-sysupgrade.itb` file. For XR1710
 ## Notes
 
 - Do the OpenWrt source checkout and build on the Ubuntu runner. Avoid cloning the full OpenWrt tree on macOS case-insensitive filesystems.
-- The main build tree defaults to ImmortalWrt. If that tree does not contain `econet_xr1710g-ubi`, the workflow imports the XR1710G device profile, DTS, and board files from `YYH2913/openwrt:xr1710g`.
+- The main build tree defaults to ImmortalWrt. If that tree does not contain `gemtek_xr1710g-ubi`, the workflow imports the Gemtek XR1710G device profile, DTS, common image definitions, and board files from the OpenWrt XR1710G PR head.
 - The packages workflow enables OpenWrt buildbot-style package output with `CONFIG_ALL`, `CONFIG_ALL_KMODS`, and `CONFIG_ALL_NONSHARED`.
 - OpenClash is added from <https://github.com/vernesong/OpenClash> and selected into the firmware as `luci-app-openclash`.
 - The default config requires `luci-app-openclash`, `luci-app-mlo`, `luci-app-airoha-npu`, and `luci-app-w1700k-fancontrol`.
@@ -47,7 +47,7 @@ The expected system firmware artifact is the `*-sysupgrade.itb` file. For XR1710
 ## References
 
 - ImmortalWrt source: <https://github.com/immortalwrt/immortalwrt/tree/openwrt-24.10>
-- YYH2913 XR1710G source overlay: <https://github.com/YYH2913/openwrt/tree/xr1710g>
+- Gemtek XR1710G OpenWrt PR overlay: <https://github.com/openwrt/openwrt/pull/22397>
 - W1700K UBI build workflow reference: <https://github.com/OpenWRT-fanboy/w1700k-ubi-build>
 - XR1710G U-Boot and HTTP Recovery notes: <https://github.com/YYH2913/http-uboot-xr1710g>
 - OpenWrt XR1710G PR: <https://github.com/openwrt/openwrt/pull/22397>

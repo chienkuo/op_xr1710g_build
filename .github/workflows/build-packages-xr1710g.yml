@@ -19,7 +19,7 @@ on:
       target_profile:
         description: OpenWrt device profile
         required: true
-        default: econet_xr1710g-ubi
+        default: gemtek_xr1710g-ubi
       package_shards:
         description: Number of package shards to run
         required: true
@@ -96,10 +96,14 @@ jobs:
           set -eu
           openwrt_repo="${INPUT_OPENWRT_REPO:-${PAYLOAD_OPENWRT_REPO:-https://github.com/immortalwrt/immortalwrt.git}}"
           openwrt_ref="${INPUT_OPENWRT_REF:-${PAYLOAD_OPENWRT_REF:-openwrt-24.10}}"
-          target_profile="${INPUT_TARGET_PROFILE:-${PAYLOAD_TARGET_PROFILE:-econet_xr1710g-ubi}}"
+          target_profile="${INPUT_TARGET_PROFILE:-${PAYLOAD_TARGET_PROFILE:-gemtek_xr1710g-ubi}}"
           package_shards="${INPUT_PACKAGE_SHARDS:-${PAYLOAD_PACKAGE_SHARDS:-12}}"
           extra_config="${INPUT_EXTRA_CONFIG:-${PAYLOAD_EXTRA_CONFIG:-}}"
           create_release="${INPUT_CREATE_RELEASE:-${PAYLOAD_CREATE_RELEASE:-true}}"
+
+          case "${target_profile}" in
+            gemtek_xr1710g) target_profile="gemtek_xr1710g-ubi" ;;
+          esac
 
           case "${package_shards}" in
             4|6|8|10|12) ;;
@@ -240,7 +244,7 @@ jobs:
         working-directory: ${{ env.SOURCE_DIR }}
         run: |
           set -eux
-          if grep -q '^define Device/econet_xr1710g-ubi$' target/linux/airoha/image/an7581.mk; then
+          if grep -q '^define Device/gemtek_xr1710g-ubi$' target/linux/airoha/image/an7581.mk; then
             echo "XR1710G device profile already exists in source."
             exit 0
           fi
@@ -248,29 +252,52 @@ jobs:
           support_dir="${RUNNER_TEMP}/xr1710g-support"
           rm -rf "${support_dir}"
           git clone --depth 1 --filter=blob:none --sparse --branch xr1710g \
-            https://github.com/YYH2913/openwrt.git "${support_dir}"
+            https://github.com/hurrian/openwrt-w1700k.git "${support_dir}"
           git -C "${support_dir}" sparse-checkout set --no-cone \
             target/linux/airoha/image/an7581.mk \
             target/linux/airoha/dts/an7581-xr1710g-ubi.dts \
+            target/linux/airoha/dts/an7581-gemtek-17xx-common.dtsi \
             target/linux/airoha/an7581/base-files
 
           install -m 0644 "${support_dir}/target/linux/airoha/dts/an7581-xr1710g-ubi.dts" target/linux/airoha/dts/
+          install -m 0644 "${support_dir}/target/linux/airoha/dts/an7581-gemtek-17xx-common.dtsi" target/linux/airoha/dts/
           mkdir -p target/linux/airoha/an7581/base-files
           cp -a "${support_dir}/target/linux/airoha/an7581/base-files/." target/linux/airoha/an7581/base-files/
+          if ! grep -q '^define Build/an7581-chainloader$' target/linux/airoha/image/an7581.mk; then
+            {
+              printf '\n'
+              awk '$0 == "define Build/an7581-chainloader" { show = 1 } show { print } $0 == "endef" && show { exit }' \
+                "${support_dir}/target/linux/airoha/image/an7581.mk"
+            } >> target/linux/airoha/image/an7581.mk
+          fi
+          if ! grep -q '^define Device/gemtek_17xx-common$' target/linux/airoha/image/an7581.mk; then
+            {
+              printf '\n'
+              awk '$0 == "define Device/gemtek_17xx-common" { show = 1 } show { print } $0 == "endef" && show { exit }' \
+                "${support_dir}/target/linux/airoha/image/an7581.mk"
+            } >> target/linux/airoha/image/an7581.mk
+          fi
           {
             printf '\n'
-            awk '/^define Device\/econet_xr1710g-ubi$/,/^TARGET_DEVICES \+= econet_xr1710g-ubi$/' \
+            awk '$0 == "define Device/gemtek_xr1710g-ubi" { show = 1 } show { print } $0 == "TARGET_DEVICES += gemtek_xr1710g-ubi" && show { exit }' \
               "${support_dir}/target/linux/airoha/image/an7581.mk"
           } >> target/linux/airoha/image/an7581.mk
 
-          grep -q '^define Device/econet_xr1710g-ubi$' target/linux/airoha/image/an7581.mk
+          grep -q '^define Device/gemtek_xr1710g-ubi$' target/linux/airoha/image/an7581.mk
+          grep -q '^define Device/gemtek_17xx-common$' target/linux/airoha/image/an7581.mk
+          grep -q '^define Build/an7581-chainloader$' target/linux/airoha/image/an7581.mk
 
       - name: Apply XR1710G reference device package overrides
         working-directory: ${{ env.SOURCE_DIR }}
         run: |
           set -eux
           image_file="target/linux/airoha/image/an7581.mk"
-          grep -q '^define Device/econet_xr1710g-ubi$' "${image_file}"
+          grep -q '^define Device/gemtek_xr1710g-ubi$' "${image_file}"
+          if awk '$0 == "define Device/gemtek_xr1710g-ubi" { show = 1 } show { print } $0 == "endef" && show { exit }' "${image_file}" | grep -Fq '$(Device/gemtek_17xx-common)'; then
+            awk '$0 == "define Device/gemtek_xr1710g-ubi" { show = 1 } show { print } $0 == "endef" && show { exit }' "${image_file}"
+            grep -q 'ARTIFACT/chainload-uboot.itb := an7581-chainloader gemtek_xr1710g' "${image_file}"
+            exit 0
+          fi
           tmp_file="$(mktemp)"
           awk '
             function print_xr1710g_packages() {
@@ -283,7 +310,7 @@ jobs:
               print "                    rtl8261n-firmware \\"
               print "                    wpad-openssl"
             }
-            /^define Device\/econet_xr1710g-ubi$/ {
+            /^define Device\/gemtek_xr1710g-ubi$/ {
               in_device = 1
               saw_packages = 0
               print
@@ -315,7 +342,7 @@ jobs:
             { print }
           ' "${image_file}" > "${tmp_file}"
           mv "${tmp_file}" "${image_file}"
-          sed -n '/^define Device\/econet_xr1710g-ubi$/,/^endef$/p' "${image_file}"
+          sed -n '/^define Device\/gemtek_xr1710g-ubi$/,/^endef$/p' "${image_file}"
           grep -q -- '-kmod-pwm-airoha' "${image_file}"
           grep -q 'airoha-en7581-mt7996-npu-firmware' "${image_file}"
 
@@ -590,6 +617,9 @@ jobs:
         run: |
           set -eux
           profile="${TARGET_PROFILE}"
+          case "${profile}" in
+            gemtek_xr1710g) profile="gemtek_xr1710g-ubi" ;;
+          esac
 
           cat > .config <<EOF
           CONFIG_TARGET_${TARGET}=y

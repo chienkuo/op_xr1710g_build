@@ -26,7 +26,7 @@ on:
       target_profile:
         description: OpenWrt device profile
         required: true
-        default: econet_xr1710g-ubi
+        default: gemtek_xr1710g-ubi
       extra_config:
         description: Extra OpenWrt .config lines, one per line
         required: false
@@ -50,7 +50,7 @@ env:
   SUBTARGET: an7581
   OPENWRT_REPO: ${{ inputs.openwrt_repo || github.event.client_payload.openwrt_repo || 'https://github.com/immortalwrt/immortalwrt.git' }}
   OPENWRT_REF: ${{ inputs.openwrt_ref || github.event.client_payload.openwrt_ref || 'openwrt-24.10' }}
-  TARGET_PROFILE: ${{ inputs.target_profile || github.event.client_payload.target_profile || 'econet_xr1710g-ubi' }}
+  TARGET_PROFILE: ${{ inputs.target_profile || github.event.client_payload.target_profile || 'gemtek_xr1710g-ubi' }}
   EXTRA_CONFIG: ${{ inputs.extra_config || github.event.client_payload.extra_config || '' }}
   CREATE_RELEASE: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.create_release) || github.event_name == 'repository_dispatch' && format('{0}', github.event.client_payload.create_release) || 'true' }}
   CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -59,7 +59,7 @@ env:
 
 jobs:
   toolchain:
-    name: Toolchain ${{ inputs.target_profile || 'econet_xr1710g-ubi' }} @ ${{ inputs.openwrt_ref || 'openwrt-24.10' }}
+    name: Toolchain ${{ inputs.target_profile || 'gemtek_xr1710g-ubi' }} @ ${{ inputs.openwrt_ref || 'openwrt-24.10' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 360
 
@@ -118,7 +118,7 @@ jobs:
         working-directory: ${{ env.SOURCE_DIR }}
         run: |
           set -eux
-          if grep -q '^define Device/econet_xr1710g-ubi$' target/linux/airoha/image/an7581.mk; then
+          if grep -q '^define Device/gemtek_xr1710g-ubi$' target/linux/airoha/image/an7581.mk; then
             echo "XR1710G device profile already exists in source."
             exit 0
           fi
@@ -126,29 +126,52 @@ jobs:
           support_dir="${RUNNER_TEMP}/xr1710g-support"
           rm -rf "${support_dir}"
           git clone --depth 1 --filter=blob:none --sparse --branch xr1710g \
-            https://github.com/YYH2913/openwrt.git "${support_dir}"
+            https://github.com/hurrian/openwrt-w1700k.git "${support_dir}"
           git -C "${support_dir}" sparse-checkout set --no-cone \
             target/linux/airoha/image/an7581.mk \
             target/linux/airoha/dts/an7581-xr1710g-ubi.dts \
+            target/linux/airoha/dts/an7581-gemtek-17xx-common.dtsi \
             target/linux/airoha/an7581/base-files
 
           install -m 0644 "${support_dir}/target/linux/airoha/dts/an7581-xr1710g-ubi.dts" target/linux/airoha/dts/
+          install -m 0644 "${support_dir}/target/linux/airoha/dts/an7581-gemtek-17xx-common.dtsi" target/linux/airoha/dts/
           mkdir -p target/linux/airoha/an7581/base-files
           cp -a "${support_dir}/target/linux/airoha/an7581/base-files/." target/linux/airoha/an7581/base-files/
+          if ! grep -q '^define Build/an7581-chainloader$' target/linux/airoha/image/an7581.mk; then
+            {
+              printf '\n'
+              awk '$0 == "define Build/an7581-chainloader" { show = 1 } show { print } $0 == "endef" && show { exit }' \
+                "${support_dir}/target/linux/airoha/image/an7581.mk"
+            } >> target/linux/airoha/image/an7581.mk
+          fi
+          if ! grep -q '^define Device/gemtek_17xx-common$' target/linux/airoha/image/an7581.mk; then
+            {
+              printf '\n'
+              awk '$0 == "define Device/gemtek_17xx-common" { show = 1 } show { print } $0 == "endef" && show { exit }' \
+                "${support_dir}/target/linux/airoha/image/an7581.mk"
+            } >> target/linux/airoha/image/an7581.mk
+          fi
           {
             printf '\n'
-            awk '/^define Device\/econet_xr1710g-ubi$/,/^TARGET_DEVICES \+= econet_xr1710g-ubi$/' \
+            awk '$0 == "define Device/gemtek_xr1710g-ubi" { show = 1 } show { print } $0 == "TARGET_DEVICES += gemtek_xr1710g-ubi" && show { exit }' \
               "${support_dir}/target/linux/airoha/image/an7581.mk"
           } >> target/linux/airoha/image/an7581.mk
 
-          grep -q '^define Device/econet_xr1710g-ubi$' target/linux/airoha/image/an7581.mk
+          grep -q '^define Device/gemtek_xr1710g-ubi$' target/linux/airoha/image/an7581.mk
+          grep -q '^define Device/gemtek_17xx-common$' target/linux/airoha/image/an7581.mk
+          grep -q '^define Build/an7581-chainloader$' target/linux/airoha/image/an7581.mk
 
       - name: Apply XR1710G reference device package overrides
         working-directory: ${{ env.SOURCE_DIR }}
         run: |
           set -eux
           image_file="target/linux/airoha/image/an7581.mk"
-          grep -q '^define Device/econet_xr1710g-ubi$' "${image_file}"
+          grep -q '^define Device/gemtek_xr1710g-ubi$' "${image_file}"
+          if awk '$0 == "define Device/gemtek_xr1710g-ubi" { show = 1 } show { print } $0 == "endef" && show { exit }' "${image_file}" | grep -Fq '$(Device/gemtek_17xx-common)'; then
+            awk '$0 == "define Device/gemtek_xr1710g-ubi" { show = 1 } show { print } $0 == "endef" && show { exit }' "${image_file}"
+            grep -q 'ARTIFACT/chainload-uboot.itb := an7581-chainloader gemtek_xr1710g' "${image_file}"
+            exit 0
+          fi
           tmp_file="$(mktemp)"
           awk '
             function print_xr1710g_packages() {
@@ -161,7 +184,7 @@ jobs:
               print "                    rtl8261n-firmware \\"
               print "                    wpad-openssl"
             }
-            /^define Device\/econet_xr1710g-ubi$/ {
+            /^define Device\/gemtek_xr1710g-ubi$/ {
               in_device = 1
               saw_packages = 0
               print
@@ -193,7 +216,7 @@ jobs:
             { print }
           ' "${image_file}" > "${tmp_file}"
           mv "${tmp_file}" "${image_file}"
-          sed -n '/^define Device\/econet_xr1710g-ubi$/,/^endef$/p' "${image_file}"
+          sed -n '/^define Device\/gemtek_xr1710g-ubi$/,/^endef$/p' "${image_file}"
           grep -q -- '-kmod-pwm-airoha' "${image_file}"
           grep -q 'airoha-en7581-mt7996-npu-firmware' "${image_file}"
 
@@ -385,6 +408,9 @@ jobs:
         run: |
           set -eux
           profile="${TARGET_PROFILE}"
+          case "${profile}" in
+            gemtek_xr1710g) profile="gemtek_xr1710g-ubi" ;;
+          esac
 
           cat > .config <<EOF
           CONFIG_TARGET_${TARGET}=y
