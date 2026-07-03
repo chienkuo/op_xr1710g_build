@@ -1,0 +1,189 @@
+name: Watch ImmortalWrt XR1710G Source
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/watch-openwrt-source.yml
+  workflow_dispatch:
+    inputs:
+      openwrt_repo:
+        description: OpenWrt/ImmortalWrt source repository
+        required: true
+        default: https://github.com/immortalwrt/immortalwrt.git
+      openwrt_ref:
+        description: OpenWrt branch, tag, or commit
+        required: true
+        default: openwrt-24.10
+      target_profile:
+        description: OpenWrt device profile
+        required: true
+        default: gemtek_xr1710g-ubi
+      force_build:
+        description: Dispatch the build chain even when matching releases already exist
+        required: true
+        type: boolean
+        default: false
+      create_release:
+        description: Publish build outputs as GitHub Releases
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: openwrt-xr1710g-source-watch
+  cancel-in-progress: false
+
+env:
+  OPENWRT_REPO: ${{ github.event.inputs.openwrt_repo || 'https://github.com/immortalwrt/immortalwrt.git' }}
+  OPENWRT_REF: ${{ github.event.inputs.openwrt_ref || 'openwrt-24.10' }}
+  TARGET_PROFILE: ${{ github.event.inputs.target_profile || 'gemtek_xr1710g-ubi' }}
+  FORCE_BUILD: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.force_build) || 'false' }}
+  CREATE_RELEASE: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.create_release) || 'true' }}
+  TOOLCHAIN_CACHE_VERSION: v2
+
+jobs:
+  watch:
+    name: Watch ${{ github.event.inputs.openwrt_ref || 'openwrt-24.10' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Resolve upstream source commit
+        id: source
+        run: |
+          set -eux
+          mkdir -p source-probe
+          git -C source-probe init
+          git -C source-probe remote add origin "${OPENWRT_REPO}"
+          git -C source-probe fetch --depth 1 origin "${OPENWRT_REF}"
+
+          source_commit="$(git -C source-probe rev-parse FETCH_HEAD)"
+          source_short="$(printf '%s' "${source_commit}" | cut -c1-12)"
+          safe_ref="$(printf '%s' "${OPENWRT_REF}" | tr -cs 'A-Za-z0-9._-' '-' | sed 's/^-//;s/-$//')"
+          target_profile="${TARGET_PROFILE}"
+          case "${target_profile}" in
+            gemtek_xr1710g) target_profile="gemtek_xr1710g-ubi" ;;
+          esac
+          if [ -z "${safe_ref}" ]; then
+            safe_ref="${source_short}"
+          fi
+
+          firmware_tag="xr1710g-${safe_ref}-${source_short}"
+          packages_tag="xr1710g-packages-${safe_ref}-${source_short}"
+          toolchain_prefix="xr1710g-toolchain-${TOOLCHAIN_CACHE_VERSION}-${safe_ref}-${source_short}-${target_profile}-"
+
+          {
+            printf 'source_commit=%s\n' "${source_commit}"
+            printf 'source_short=%s\n' "${source_short}"
+            printf 'safe_ref=%s\n' "${safe_ref}"
+            printf 'target_profile=%s\n' "${target_profile}"
+            printf 'firmware_tag=%s\n' "${firmware_tag}"
+            printf 'packages_tag=%s\n' "${packages_tag}"
+            printf 'toolchain_prefix=%s\n' "${toolchain_prefix}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check matching releases
+        id: releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FIRMWARE_TAG: ${{ steps.source.outputs.firmware_tag }}
+          PACKAGES_TAG: ${{ steps.source.outputs.packages_tag }}
+          TOOLCHAIN_PREFIX: ${{ steps.source.outputs.toolchain_prefix }}
+        run: |
+          set -eux
+          firmware_exists=false
+          packages_exists=false
+          toolchain_exists=false
+          toolchain_tag=""
+          active_runs=0
+
+          if gh release view "${FIRMWARE_TAG}" >/dev/null 2>&1; then
+            firmware_exists=true
+          fi
+          if gh release view "${PACKAGES_TAG}" >/dev/null 2>&1; then
+            packages_exists=true
+          fi
+
+          toolchain_tag="$(gh release list --limit 200 --json tagName,isDraft \
+            --jq '.[] | select(.isDraft == false) | .tagName' \
+            | grep -m1 "^${TOOLCHAIN_PREFIX}" || true)"
+          if [ -n "${toolchain_tag}" ]; then
+            toolchain_exists=true
+          fi
+
+          for workflow in \
+            "Build OpenWrt XR1710G Toolchain" \
+            "Build OpenWrt XR1710G" \
+            "Build OpenWrt XR1710G Packages"
+          do
+            count="$(gh run list --workflow "${workflow}" --limit 20 \
+              --json status --jq '[.[] | select(.status != "completed")] | length')"
+            active_runs=$((active_runs + count))
+          done
+
+          should_dispatch=false
+          reason="matching toolchain, firmware, and package releases already exist"
+          if [ "${FORCE_BUILD}" = "true" ]; then
+            should_dispatch=true
+            reason="manual force_build requested"
+          elif [ "${active_runs}" != "0" ]; then
+            should_dispatch=false
+            reason="XR1710G build chain already has active run(s)"
+          elif [ "${toolchain_exists}" != "true" ]; then
+            should_dispatch=true
+            reason="matching toolchain release is missing"
+          elif [ "${firmware_exists}" != "true" ]; then
+            should_dispatch=true
+            reason="matching firmware release is missing"
+          elif [ "${packages_exists}" != "true" ]; then
+            should_dispatch=true
+            reason="matching package release is missing"
+          fi
+
+          {
+            printf 'firmware_exists=%s\n' "${firmware_exists}"
+            printf 'packages_exists=%s\n' "${packages_exists}"
+            printf 'toolchain_exists=%s\n' "${toolchain_exists}"
+            printf 'toolchain_tag=%s\n' "${toolchain_tag}"
+            printf 'active_runs=%s\n' "${active_runs}"
+            printf 'should_dispatch=%s\n' "${should_dispatch}"
+            printf 'reason=%s\n' "${reason}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Show watch decision
+        run: |
+          set -eux
+          echo "OpenWrt repo: ${OPENWRT_REPO}"
+          echo "OpenWrt ref: ${OPENWRT_REF}"
+          echo "OpenWrt commit: ${{ steps.source.outputs.source_commit }}"
+          echo "Target profile: ${{ steps.source.outputs.target_profile }}"
+          echo "Toolchain release exists: ${{ steps.releases.outputs.toolchain_exists }}"
+          echo "Firmware release exists: ${{ steps.releases.outputs.firmware_exists }}"
+          echo "Package release exists: ${{ steps.releases.outputs.packages_exists }}"
+          echo "Active build-chain runs: ${{ steps.releases.outputs.active_runs }}"
+          echo "Dispatch build chain: ${{ steps.releases.outputs.should_dispatch }}"
+          echo "Reason: ${{ steps.releases.outputs.reason }}"
+
+      - name: Dispatch XR1710G build chain
+        if: ${{ steps.releases.outputs.should_dispatch == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eux
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/dispatches" \
+            -f event_type=openwrt-updated \
+            -f client_payload[openwrt_repo]="${OPENWRT_REPO}" \
+            -f client_payload[openwrt_ref]="${OPENWRT_REF}" \
+            -f client_payload[target_profile]="${{ steps.source.outputs.target_profile }}" \
+            -f client_payload[create_release]="${CREATE_RELEASE}" \
+            -f client_payload[source_commit]="${{ steps.source.outputs.source_commit }}" \
+            -f client_payload[source_short]="${{ steps.source.outputs.source_short }}" \
+            -f client_payload[reason]="${{ steps.releases.outputs.reason }}"
