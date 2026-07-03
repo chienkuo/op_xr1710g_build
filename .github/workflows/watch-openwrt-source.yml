@@ -42,6 +42,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  GH_REPO: ${{ github.repository }}
   OPENWRT_REPO: ${{ github.event.inputs.openwrt_repo || 'https://github.com/immortalwrt/immortalwrt.git' }}
   OPENWRT_REF: ${{ github.event.inputs.openwrt_ref || 'openwrt-24.10' }}
   TARGET_PROFILE: ${{ github.event.inputs.target_profile || 'gemtek_xr1710g-ubi' }}
