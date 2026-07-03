@@ -775,6 +775,11 @@ jobs:
 
       - name: Download package sources
         working-directory: ${{ env.SOURCE_DIR }}
+        env:                                                               
+          GONOSUMCHECK: ""                                                 
+          GONOSUMDB: ""                                                    
+          GOFLAGS: "-mod=mod"                                              
+          GOPROXY: "https://proxy.golang.org,direct"
         run: |
           set -eux
           make download -j"$(nproc)"
@@ -782,6 +787,11 @@ jobs:
 
       - name: Compile firmware
         working-directory: ${{ env.SOURCE_DIR }}
+        env:                                                               
+          GONOSUMCHECK: ""                                                 
+          GONOSUMDB: ""                                                    
+          GOFLAGS: "-mod=mod"                                              
+          GOPROXY: "https://proxy.golang.org,direct"
         run: |
           set -o pipefail
           nproc
