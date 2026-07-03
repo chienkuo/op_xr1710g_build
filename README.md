@@ -12,13 +12,15 @@ The default build source is:
 ## Usage
 
 1. Push this repository to GitHub.
-2. Push to the `main` branch to start the first toolchain build automatically.
+2. Push to the `main` branch to register the workflows.
 3. Open `Actions`.
 4. After the toolchain succeeds, the firmware and package workflows run automatically.
 5. Run `Build OpenWrt XR1710G` manually later if you want to override inputs.
 6. Download the `openwrt-xr1710g-*` artifact after the build completes.
 
 Successful firmware builds publish a GitHub Release containing firmware files and the exported OpenWrt `.config`.
+
+A source watcher workflow checks the ImmortalWrt `openwrt-24.10` branch once per hour. When the latest upstream commit does not already have matching toolchain, firmware, and package releases, it sends an `openwrt-updated` repository dispatch event to start the normal toolchain -> firmware/packages build chain. The watcher can also be run manually with `force_build` to rebuild even when matching releases already exist.
 
 A separate toolchain workflow runs once per week, on repository dispatch, and after build workflow changes. It deletes matching old Actions cache keys at the start of the next toolchain run, then builds the OpenWrt host tools and target toolchain, saves the fresh toolchain into Actions cache, and uploads a profile-specific `openwrt-xr1710g-toolchain-*.tar.zst` archive to a GitHub Release. Automatic firmware and package builds run only after a successful toolchain build and first try to restore the matching toolchain from cache, then from the matching toolchain release. Manual firmware/package runs still attempt a normal OpenWrt build when no prebuilt toolchain is available.
 

@@ -248,9 +248,14 @@ jobs:
         working-directory: ${{ env.SOURCE_DIR }}
         run: |
           set -eux
+          profile_exists=false
           if grep -q '^define Device/gemtek_xr1710g-ubi$' target/linux/airoha/image/an7581.mk; then
-            echo "XR1710G device profile already exists in source."
-            exit 0
+            profile_exists=true
+            if [ -f target/linux/airoha/dts/an7581-npu-mt7996.dtsi ]; then
+              echo "XR1710G device profile and NPU MT7996 DTS already exist in source; applying support deltas only."
+            else
+              echo "XR1710G device profile exists; importing missing NPU MT7996 DTS."
+            fi
           fi
 
           support_dir="${RUNNER_TEMP}/xr1710g-support"
@@ -261,12 +266,32 @@ jobs:
             target/linux/airoha/image/an7581.mk \
             target/linux/airoha/dts/an7581-xr1710g-ubi.dts \
             target/linux/airoha/dts/an7581-gemtek-17xx-common.dtsi \
+            target/linux/airoha/dts/an7581-npu-mt7996.dtsi \
             target/linux/airoha/an7581/base-files \
-            target/linux/airoha/dts/an7581-npu-mt7996.dtsi
+            package/boot/uboot-tools/uboot-envtools/files/airoha_an7581
 
+          install -m 0644 "${support_dir}/target/linux/airoha/dts/an7581-npu-mt7996.dtsi" target/linux/airoha/dts/
+          modules_file="target/linux/airoha/modules.mk"
+          if grep -q 'KernelPackage/pwm-an7581' "${modules_file}"; then
+            sed -i \
+              -e 's#KernelPackage/pwm-an7581#KernelPackage/pwm-airoha#g' \
+              -e 's#TITLE:=Airoha EN7581 PWM#TITLE:=Airoha AN7581 and AN7583 PWM#' \
+              -e 's#DEPENDS:=@(TARGET_airoha_an7581)#DEPENDS:=@TARGET_airoha_an7581||TARGET_airoha_an7583#' \
+              "${modules_file}"
+          fi
+          grep -q '^define KernelPackage/pwm-airoha$' "${modules_file}"
+          for uboot_env_dir in package/boot/uboot-envtools/files package/boot/uboot-tools/uboot-envtools/files; do
+            if [ -d "${uboot_env_dir}" ]; then
+              install -m 0644 "${support_dir}/package/boot/uboot-tools/uboot-envtools/files/airoha_an7581" "${uboot_env_dir}/airoha_an7581"
+              grep -q 'gemtek,xr1710g-ubi' "${uboot_env_dir}/airoha_an7581"
+            fi
+          done
+          if [ "${profile_exists}" = "true" ]; then
+            test -f target/linux/airoha/dts/an7581-npu-mt7996.dtsi
+            exit 0
+          fi
           install -m 0644 "${support_dir}/target/linux/airoha/dts/an7581-xr1710g-ubi.dts" target/linux/airoha/dts/
           install -m 0644 "${support_dir}/target/linux/airoha/dts/an7581-gemtek-17xx-common.dtsi" target/linux/airoha/dts/
-          install -m 0644 "${support_dir}/target/linux/airoha/dts/an7581-npu-mt7996.dtsi" target/linux/airoha/dts/
           mkdir -p target/linux/airoha/an7581/base-files
           cp -a "${support_dir}/target/linux/airoha/an7581/base-files/." target/linux/airoha/an7581/base-files/
           if ! grep -q '^define Build/an7581-chainloader$' target/linux/airoha/image/an7581.mk; then
@@ -292,6 +317,7 @@ jobs:
           grep -q '^define Device/gemtek_xr1710g-ubi$' target/linux/airoha/image/an7581.mk
           grep -q '^define Device/gemtek_17xx-common$' target/linux/airoha/image/an7581.mk
           grep -q '^define Build/an7581-chainloader$' target/linux/airoha/image/an7581.mk
+          test -f target/linux/airoha/dts/an7581-npu-mt7996.dtsi
 
       - name: Apply XR1710G reference device package overrides
         working-directory: ${{ env.SOURCE_DIR }}
@@ -300,7 +326,19 @@ jobs:
           image_file="target/linux/airoha/image/an7581.mk"
           grep -q '^define Device/gemtek_xr1710g-ubi$' "${image_file}"
           if awk '$0 == "define Device/gemtek_xr1710g-ubi" { show = 1 } show { print } $0 == "endef" && show { exit }' "${image_file}" | grep -Fq '$(Device/gemtek_17xx-common)'; then
+            if ! awk '$0 == "define Device/gemtek_xr1710g-ubi" { show = 1 } show { print } $0 == "endef" && show { exit }' "${image_file}" | grep -q 'uboot-envtools'; then
+              awk '
+                /^define Device\/gemtek_xr1710g-ubi$/ { in_device = 1 }
+                in_device && /^endef$/ {
+                  print "  DEVICE_PACKAGES += uboot-envtools"
+                  in_device = 0
+                }
+                { print }
+              ' "${image_file}" > "${image_file}.tmp"
+              mv "${image_file}.tmp" "${image_file}"
+            fi
             awk '$0 == "define Device/gemtek_xr1710g-ubi" { show = 1 } show { print } $0 == "endef" && show { exit }' "${image_file}"
+            awk '$0 == "define Device/gemtek_xr1710g-ubi" { show = 1 } show { print } $0 == "endef" && show { exit }' "${image_file}" | grep -q 'uboot-envtools'
             echo "Using upstream Gemtek XR1710G package set."
             exit 0
           fi
@@ -314,6 +352,7 @@ jobs:
               print "                    fitblk kmod-i2c-an7581 kmod-hwmon-nct7802 \\"
               print "                    kmod-mt7996-firmware kmod-phy-realtek \\"
               print "                    rtl8261n-firmware \\"
+              print "                    uboot-envtools \\"
               print "                    wpad-openssl"
             }
             /^define Device\/gemtek_xr1710g-ubi$/ {
