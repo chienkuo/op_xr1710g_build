@@ -261,10 +261,12 @@ jobs:
             target/linux/airoha/image/an7581.mk \
             target/linux/airoha/dts/an7581-xr1710g-ubi.dts \
             target/linux/airoha/dts/an7581-gemtek-17xx-common.dtsi \
-            target/linux/airoha/an7581/base-files
+            target/linux/airoha/an7581/base-files \
+            target/linux/airoha/dts/an7581-npu-mt7996.dtsi
 
           install -m 0644 "${support_dir}/target/linux/airoha/dts/an7581-xr1710g-ubi.dts" target/linux/airoha/dts/
           install -m 0644 "${support_dir}/target/linux/airoha/dts/an7581-gemtek-17xx-common.dtsi" target/linux/airoha/dts/
+          install -m 0644 "${support_dir}/target/linux/airoha/dts/an7581-npu-mt7996.dtsi" target/linux/airoha/dts/
           mkdir -p target/linux/airoha/an7581/base-files
           cp -a "${support_dir}/target/linux/airoha/an7581/base-files/." target/linux/airoha/an7581/base-files/
           if ! grep -q '^define Build/an7581-chainloader$' target/linux/airoha/image/an7581.mk; then
