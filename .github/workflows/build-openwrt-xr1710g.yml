@@ -824,12 +824,24 @@ jobs:
           make download -j"$(nproc)"
           find dl -size -1024c -type f -print -delete
 
+      - name: Fix Go build for sing-box (allow GOFLAGS pass-through)       
+        working-directory: ${{ env.SOURCE_DIR }}                           
+        run: |                                                             
+          set -eux                                                         
+          target="feeds/packages/lang/golang/golang-values.mk"             
+          if [ -f "$target" ]; then                                        
+            # Remove GOFLAGS from unexport list so -mod=mod can be   passed                                                                     
+            sed -i '/^unexport \\/,/^# Unmodified:/{/GOFLAGS/d}'  "$target"                                                                  
+            # Verify                                                       
+            grep -n 'GOFLAGS' "$target" || echo "GOFLAGS removed from unexport (pass-through enabled)"                                           
+          fi
+
       - name: Compile firmware
         working-directory: ${{ env.SOURCE_DIR }}
         env:                                                               
           GONOSUMCHECK: ""                                                 
           GONOSUMDB: ""                                                    
-          GOFLAGS: "-mod=mod"                                              
+          GOFLAGS: "-mod=mod -modcacherw"                                              
           GOPROXY: "https://proxy.golang.org,direct"
         run: |
           set -o pipefail
