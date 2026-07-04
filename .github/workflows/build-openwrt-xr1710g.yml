@@ -817,11 +817,30 @@ jobs:
             }
           done
 
+      - name: Clean stale Go module cache (beta modules)
+        working-directory: ${{ env.SOURCE_DIR }}
+        run: |
+          set -eux
+          cache_dir="dl/go-mod-cache"
+          if [ -d "$cache_dir" ]; then
+            for mod in \
+              "cache/download/github.com/sagernet/nftables/@v/" \
+              "cache/download/github.com/zeebo/blake3/@v/" \
+              "cache/download/github.com/anytls/sing-anytls/@v/"
+            do
+              path="$cache_dir/$mod"
+              if [ -d "$path" ] || ls "$path"* >/dev/null 2>&1; then
+                rm -rf "${path}"* 2>/dev/null || true
+                echo "  Cleaned: $mod"
+              fi
+            done
+          fi
+
       - name: Download package sources
         working-directory: ${{ env.SOURCE_DIR }}
         env:                                                               
-          GONOSUMCHECK: ""                                                 
-          GONOSUMDB: ""                                                    
+          GONOSUMCHECK: "*"                                                 
+          GONOSUMDB: "*"                                                    
           GOFLAGS: "-mod=mod"                                              
           GOPROXY: "https://proxy.golang.org,direct"
         run: |
@@ -844,10 +863,10 @@ jobs:
       - name: Compile firmware
         working-directory: ${{ env.SOURCE_DIR }}
         env:                                                               
-          GONOSUMCHECK: ""                                                 
-          GONOSUMDB: ""                                                    
+          GONOSUMCHECK: "*"                                                 
+          GONOSUMDB: "*"                                                    
           GOFLAGS: "-mod=mod -modcacherw"                                              
-          GOPROXY: "https://proxy.golang.org,direct"
+          GOPROXY: "direct"
         run: |
           set -o pipefail
           nproc
