@@ -878,12 +878,15 @@ jobs:
           tag="${RELEASE_TAG}"
           build_time="$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %z')"
           if gh release view "${tag}" >/dev/null 2>&1; then
-            echo "Release ${tag} already exists; skipping duplicate release."
-            exit 0
+            gh release edit "${tag}" \
+              --title "路由器固件 ${build_time}" \
+              --notes-file artifacts/xr1710g/BUILDINFO.txt
+            gh release upload "${tag}" artifacts/xr1710g/* --clobber
+          else
+            gh release create "${tag}" artifacts/xr1710g/* \
+              --title "路由器固件 ${build_time}" \
+              --notes-file artifacts/xr1710g/BUILDINFO.txt
           fi
-          gh release create "${tag}" artifacts/xr1710g/* \
-            --title "路由器固件 ${build_time}" \
-            --notes-file artifacts/xr1710g/BUILDINFO.txt
 
       - name: Clean firmware release staging files
         if: ${{ env.CREATE_RELEASE == 'true' }}
