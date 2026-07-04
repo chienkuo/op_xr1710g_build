@@ -596,12 +596,15 @@ jobs:
           build_time="$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %z')"
           tag="xr1710g-toolchain-${TOOLCHAIN_CACHE_VERSION}-${{ steps.source.outputs.safe_ref }}-${{ steps.source.outputs.source_short }}-${{ steps.source.outputs.target_profile }}-${{ steps.source.outputs.cache_week }}"
           if gh release view "${tag}" >/dev/null 2>&1; then
-            echo "Release ${tag} already exists; skipping duplicate release."
-            exit 0
+            gh release edit "${tag}" \
+              --title "toolchain ${build_time}" \
+              --notes-file artifacts/toolchain/BUILDINFO-toolchain.txt
+            gh release upload "${tag}" artifacts/toolchain/* --clobber
+          else
+            gh release create "${tag}" artifacts/toolchain/* \
+              --title "toolchain ${build_time}" \
+              --notes-file artifacts/toolchain/BUILDINFO-toolchain.txt
           fi
-          gh release create "${tag}" artifacts/toolchain/* \
-            --title "toolchain ${build_time}" \
-            --notes-file artifacts/toolchain/BUILDINFO-toolchain.txt
 
       - name: Clean toolchain release staging files
         if: ${{ env.CREATE_RELEASE == 'true' }}
