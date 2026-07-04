@@ -769,10 +769,12 @@ jobs:
           CONFIG_PACKAGE_luci-app-firewall=y
           CONFIG_PACKAGE_luci-app-mlo=y
           CONFIG_PACKAGE_luci-app-package-manager=y
+          CONFIG_PACKAGE_luci-app-sing-box=y
           CONFIG_PACKAGE_luci-app-ttyd=y
           CONFIG_PACKAGE_luci-app-irqbalance=y
           CONFIG_PACKAGE_luci-app-w1700k-fancontrol=y
           CONFIG_PACKAGE_luci-compat=y
+          CONFIG_PACKAGE_luci-proto-wireguard=y
           CONFIG_PACKAGE_luci-proto-ipv6=y
           CONFIG_PACKAGE_luci-proto-ppp=y
           CONFIG_PACKAGE_luci-theme-bootstrap=y
@@ -799,7 +801,7 @@ jobs:
             grep "^CONFIG_TARGET_${TARGET}_${SUBTARGET}_DEVICE_" .config || true
             exit 1
           }
-          for pkg in luci-app-openclash luci-app-mlo luci-app-airoha-npu luci-app-w1700k-fancontrol; do
+          for pkg in luci-app-openclash luci-app-mlo luci-app-airoha-npu luci-app-w1700k-fancontrol luci-app-sing-box luci-proto-wireguard; do
             grep -q "^CONFIG_PACKAGE_${pkg}=y$" .config || {
               echo "Required package was not selected by OpenWrt Kconfig: ${pkg}"
               exit 1

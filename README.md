@@ -36,7 +36,7 @@ The expected system firmware artifact is the `*-sysupgrade.itb` file. For XR1710
 - The main build tree defaults to ImmortalWrt. If that tree does not contain `gemtek_xr1710g-ubi`, the workflow imports the Gemtek XR1710G device profile, DTS, common image definitions, and board files from the OpenWrt XR1710G PR head.
 - The packages workflow enables OpenWrt buildbot-style package output with `CONFIG_ALL`, `CONFIG_ALL_KMODS`, and `CONFIG_ALL_NONSHARED`.
 - OpenClash is added from <https://github.com/vernesong/OpenClash> and selected into the firmware as `luci-app-openclash`.
-- The default config requires `luci-app-openclash`, `luci-app-mlo`, `luci-app-airoha-npu`, and `luci-app-w1700k-fancontrol`.
+- The default config requires `luci-app-openclash`, `luci-app-mlo`, `luci-app-airoha-npu`, `luci-app-w1700k-fancontrol`, `luci-app-sing-box`, and `luci-proto-wireguard`.
 - MLO LuCI is added from <https://github.com/YYH2913/luci-app-mlo>.
 - Airoha NPU LuCI is added from <https://github.com/rchen14b/luci-app-airoha-npu>.
 - W1700K fan control is added from <https://github.com/rchen14b/luci-app-w1700k-fancontrol>.

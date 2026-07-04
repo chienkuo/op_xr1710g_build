@@ -703,8 +703,10 @@ jobs:
           CONFIG_PACKAGE_luci-app-airoha-npu=y
           CONFIG_PACKAGE_luci-app-openclash=y
           CONFIG_PACKAGE_luci-app-mlo=y
+          CONFIG_PACKAGE_luci-app-sing-box=y
           CONFIG_PACKAGE_luci-app-w1700k-fancontrol=y
           CONFIG_PACKAGE_luci-compat=y
+          CONFIG_PACKAGE_luci-proto-wireguard=y
           CONFIG_PACKAGE_dnsmasq-full=y
           # CONFIG_TARGET_ROOTFS_INITRAMFS is not set
           EOF
@@ -715,7 +717,7 @@ jobs:
 
           grep -q "^CONFIG_TARGET_${TARGET}_${SUBTARGET}_DEVICE_${profile}=y$" .config
           make defconfig
-          for pkg in luci-app-openclash luci-app-mlo luci-app-airoha-npu luci-app-w1700k-fancontrol; do
+          for pkg in luci-app-openclash luci-app-mlo luci-app-airoha-npu luci-app-w1700k-fancontrol luci-app-sing-box luci-proto-wireguard; do
             grep -q "^CONFIG_PACKAGE_${pkg}=y$" .config || {
               echo "Required package was not selected by OpenWrt Kconfig: ${pkg}"
               exit 1
@@ -745,7 +747,7 @@ jobs:
         working-directory: ${{ env.SOURCE_DIR }}
         run: |
           set -eu
-          for pkg in luci-app-openclash luci-app-mlo luci-app-airoha-npu luci-app-w1700k-fancontrol; do
+          for pkg in luci-app-openclash luci-app-mlo luci-app-airoha-npu luci-app-w1700k-fancontrol luci-app-sing-box luci-proto-wireguard; do
             pkgdir=""
             for candidate in \
               "package/${pkg}" \
