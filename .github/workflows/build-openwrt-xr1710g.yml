@@ -400,6 +400,7 @@ jobs:
           set -eux
           image_file="target/linux/airoha/image/an7581.mk"
           sed -i '/^[[:space:]]*ARTIFACT\/chainload-uboot\.itb := an7581-chainloader gemtek_xr1710g$/d' "${image_file}"
+          sed -i '/^[[:space:]]*ARTIFACT\/chainload-uboot\.itb := an7581-chainloader gemtek_w1700k$/d' "${image_file}"
           sed -n '/^define Device\/gemtek_xr1710g-ubi$/,/^endef$/p' "${image_file}"
           if sed -n '/^define Device\/gemtek_xr1710g-ubi$/,/^endef$/p' "${image_file}" | grep -q 'ARTIFACT/chainload-uboot.itb'; then
             echo "XR1710G system firmware profile still contains a chainloader artifact."
