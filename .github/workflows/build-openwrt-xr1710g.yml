@@ -15,7 +15,7 @@ on:
       openwrt_ref:
         description: OpenWrt branch, tag, or commit
         required: true
-        default: openwrt-24.10
+        default: openwrt-25.12
       target_profile:
         description: OpenWrt device profile
         required: true
@@ -23,7 +23,7 @@ on:
       wireless_country:
         description: First-boot wireless country code
         required: true
-        default: CN
+        default: US
       fix_5g_channel:
         description: Force 5 GHz radio to a non-DFS channel on first boot
         required: true
