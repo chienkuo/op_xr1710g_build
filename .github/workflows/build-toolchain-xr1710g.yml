@@ -151,11 +151,14 @@ jobs:
           if grep -q 'KernelPackage/pwm-an7581' "${modules_file}"; then
             sed -i \
               -e 's#KernelPackage/pwm-an7581#KernelPackage/pwm-airoha#g' \
+              -e 's#KernelPackage,pwm-an7581#KernelPackage,pwm-airoha#g' \
               -e 's#TITLE:=Airoha EN7581 PWM#TITLE:=Airoha AN7581 and AN7583 PWM#' \
               -e 's#DEPENDS:=@(TARGET_airoha_an7581)#DEPENDS:=@TARGET_airoha_an7581||TARGET_airoha_an7583#' \
               "${modules_file}"
           fi
           grep -q '^define KernelPackage/pwm-airoha$' "${modules_file}"
+          grep -Fq '$(eval $(call KernelPackage,pwm-airoha))' "${modules_file}"
+          ! grep -q 'pwm-an7581' "${modules_file}"
           for uboot_env_dir in package/boot/uboot-envtools/files package/boot/uboot-tools/uboot-envtools/files; do
             if [ -d "${uboot_env_dir}" ]; then
               install -m 0644 "${support_dir}/package/boot/uboot-tools/uboot-envtools/files/airoha_an7581" "${uboot_env_dir}/airoha_an7581"
