@@ -334,31 +334,17 @@ jobs:
           dts_file="target/linux/airoha/dts/an7581-xr1710g-ubi.dts"
           test -f "${dts_file}"
 
-          # Remove existing &spi_nand block
-          awk '
-            /^&spi_nand[[:space:]]*\{/ { skip=1; depth=0 }
-            skip {
-              depth += gsub(/\{/, "{")
-              depth -= gsub(/\}/, "}")
-              if (depth <= 0 && $0 ~ /};/) { skip=0 }
-              next
-            }
-            !skip { print }
-          ' "${dts_file}" > "${dts_file}.tmp"
-          mv "${dts_file}.tmp" "${dts_file}"
-
-          # Remove existing &ubi_factory block (if any)
-          awk '
-            /^&ubi_factory[[:space:]]*\{/ { skip=1; depth=0 }
-            skip {
-              depth += gsub(/\{/, "{")
-              depth -= gsub(/\}/, "}")
-              if (depth <= 0 && $0 ~ /};/) { skip=0 }
-              next
-            }
-            !skip { print }
-          ' "${dts_file}" > "${dts_file}.tmp"
-          mv "${dts_file}.tmp" "${dts_file}"
+          python3 -c "
+          import re
+          with open('${dts_file}') as f:
+              c = f.read()
+          # Remove existing &spi_nand { ... }; and &ubi_factory { ... }; blocks
+          for label in ('spi_nand', 'ubi_factory'):
+              c = re.sub(rf'&{label}\s*\{{[^{{}}]*(?:\{{[^{{}}]*\}}[^{{}}]*)*\}};',
+                         '', c, flags=re.DOTALL)
+          with open('${dts_file}', 'w') as f:
+              f.write(c.rstrip() + '\n')
+          "
 
           # Append chainloader-compatible partition layout
           cat >> "${dts_file}" <<'DTSEOF'
@@ -448,9 +434,10 @@ jobs:
           };
           DTSEOF
 
-          # Verify
+          # Verify only our partitions exist
           grep -q 'label = "chainloader"' "${dts_file}"
           grep -q 'reg = <0x00700000 0x1d9c0000>' "${dts_file}"
+          ! grep -q '0x07e00000' "${dts_file}" || { echo "Old EVB reserved_bmt still present"; exit 1; }
           echo "MTD partitions aligned with XR1710G chainloader."
 
       - name: Apply XR1710G reference device package overrides
