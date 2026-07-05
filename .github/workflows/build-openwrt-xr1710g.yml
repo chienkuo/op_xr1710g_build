@@ -818,63 +818,35 @@ jobs:
             }
           done
 
-      - name: Clean stale Go module cache (beta modules)
+      - name: Clean stale Go module cache
         working-directory: ${{ env.SOURCE_DIR }}
         run: |
           set -eux
-          cache_dir="dl/go-mod-cache"
-          if [ -d "$cache_dir" ]; then
-            for mod in \
-              "cache/download/github.com/sagernet/nftables/@v/" \
-              "cache/download/github.com/zeebo/blake3/@v/" \
-              "cache/download/github.com/anytls/sing-anytls/@v/"
-            do
-              path="$cache_dir/$mod"
-              if [ -d "$path" ] || ls "$path"* >/dev/null 2>&1; then
-                rm -rf "${path}"* 2>/dev/null || true
-                echo "  Cleaned: $mod"
-              fi
-            done
-          fi
+          # Remove entire Go module cache to avoid stale proxy zips
+          rm -rf dl/go-mod-cache
+          echo "=== Go module cache cleared ==="
 
-      - name: Download package sources
+- name: Download package sources
         working-directory: ${{ env.SOURCE_DIR }}
         env:                                                               
           GONOSUMCHECK: "*"                                                 
           GONOSUMDB: "*"                                                    
           GOFLAGS: "-mod=mod"                                              
-          GOPROXY: "https://proxy.golang.org,direct"
+          GOPROXY: "direct"
         run: |
           set -eux
           make download -j"$(nproc)"
           find dl -size -1024c -type f -print -delete
 
-      - name: Fix Go build for sing-box (clean cache + GOFLAGS + direct proxy)
+      - name: Fix golang-values.mk (allow GOFLAGS pass-through)
         working-directory: ${{ env.SOURCE_DIR }}
         run: |
           set -eux
           target="feeds/packages/lang/golang/golang-values.mk"
           if [ -f "$target" ]; then
-            # Remove GOFLAGS from unexport list so -mod=mod can be passed
             sed -i '/^unexport \\/,/^# Unmodified:/{/GOFLAGS/d}' "$target"
             grep -n 'GOFLAGS' "$target" || echo "GOFLAGS removed from unexport (pass-through enabled)"
           fi
-          # Clean corrupted Go module cache for sing-box dependencies
-          echo "=== Cleaning stale Go module cache ==="
-          cache_dir="dl/go-mod-cache"
-          for mod in \
-            "github.com/sagernet/nftables@v0.3.0-beta.4" \
-            "github.com/zeebo/blake3@v0.2.4" \
-            "github.com/anytls/sing-anytls@v0.0.11" \
-            "github.com/sagernet/sing-shadowsocks2@v0.2.1" \
-            "cache/download/github.com/sagernet/nftables/@v/v0.3.0-beta.4" \
-            "cache/download/github.com/zeebo/blake3/@v/v0.2.4" \
-            "cache/download/github.com/anytls/sing-anytls/@v/v0.0.11" \
-            "cache/download/github.com/sagernet/sing-shadowsocks2/@v/v0.2.1"
-          do
-            rm -rf "${cache_dir}/${mod}"* 2>/dev/null || true
-          done
-          echo "=== Module cache cleaned ==="
 
 - name: Compile firmware
         working-directory: ${{ env.SOURCE_DIR }}
