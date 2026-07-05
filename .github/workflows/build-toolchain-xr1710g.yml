@@ -315,7 +315,6 @@ jobs:
           ! grep -q '^&afe[[:space:]]*{' "${dts_file}"
 
       - name: Add Airoha offload sk_buff kernel patch
-        if: ${{ env.OPENWRT_REF == 'openwrt-24.10' }}
         working-directory: ${{ env.SOURCE_DIR }}
         run: |
           set -eux
@@ -332,7 +331,6 @@ jobs:
           grep -n -A8 -B2 'skbuff.h' "${patch_file}"
 
       - name: Add Airoha PWM Linux 6.6 compatibility patch
-        if: ${{ env.OPENWRT_REF == 'openwrt-24.10' }}
         working-directory: ${{ env.SOURCE_DIR }}
         run: |
           set -eux
