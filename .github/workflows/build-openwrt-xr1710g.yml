@@ -563,16 +563,15 @@ jobs:
           grep -n 'SND_SOC_AN7581' "${kernel_config}"
 
       - name: Restore downloads and ccache
-        if: ${{ !inputs.skip_cache }}
+        if: ${{ !inputs.skip_cache && needs.check-upstream.outputs.openwrt_ref != 'master' }}
         uses: actions/cache@v4
         with:
           path: |
             ${{ env.SOURCE_DIR }}/dl
             ${{ env.CCACHE_DIR }}
-          key: xr1710g-${{ runner.os }}-${{ needs.check-upstream.outputs.safe_ref }}-${{ hashFiles('.github/workflows/build-openwrt-xr1710g.yml') }}
+          key: xr1710g-${{ runner.os }}-${{ needs.check-upstream.outputs.openwrt_ref }}-${{ needs.check-upstream.outputs.safe_ref }}-${{ hashFiles('.github/workflows/build-openwrt-xr1710g.yml') }}
           restore-keys: |
-            xr1710g-${{ runner.os }}-${{ needs.check-upstream.outputs.safe_ref }}-
-            xr1710g-${{ runner.os }}-
+            xr1710g-${{ runner.os }}-${{ needs.check-upstream.outputs.openwrt_ref }}-${{ needs.check-upstream.outputs.safe_ref }}-
 
       - name: Restore weekly toolchain cache
         if: ${{ !inputs.skip_cache }}
