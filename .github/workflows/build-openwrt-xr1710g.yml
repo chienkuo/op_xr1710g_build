@@ -327,6 +327,18 @@ jobs:
           grep -q '^define Build/an7581-chainloader$' target/linux/airoha/image/an7581.mk
           test -f target/linux/airoha/dts/an7581-npu-mt7996.dtsi
 
+      - name: Fix sysupgrade kernel volume name for XR1710G
+        working-directory: ${{ env.SOURCE_DIR }}
+        run: |
+          set -eux
+          platform_sh="target/linux/airoha/an7581/base-files/lib/upgrade/platform.sh"
+          test -f "${platform_sh}"
+          sed -i '/gemtek,xr1710g-ubi)/{
+            n
+            s/\t\t\tfit_do_upgrade/\t\t\texport CI_KERNPART=fit\n\t\t\tfit_do_upgrade/
+          }' "${platform_sh}"
+          grep -B1 -A2 'CI_KERNPART=fit' "${platform_sh}"
+
       - name: Align MTD partitions with XR1710G chainloader
         working-directory: ${{ env.SOURCE_DIR }}
         run: |
