@@ -558,6 +558,7 @@ jobs:
           grep -n 'SND_SOC_AN7581' "${kernel_config}"
 
       - name: Restore downloads and ccache
+        if: ${{ !inputs.skip_cache }}
         uses: actions/cache@v4
         with:
           path: |
@@ -569,6 +570,7 @@ jobs:
             xr1710g-${{ runner.os }}-
 
       - name: Restore weekly toolchain cache
+        if: ${{ !inputs.skip_cache }}
         id: toolchain-cache
         uses: actions/cache/restore@v4
         with:
