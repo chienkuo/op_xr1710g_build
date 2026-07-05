@@ -314,6 +314,111 @@ jobs:
           fi
           ! grep -q '^&afe[[:space:]]*{' "${dts_file}"
 
+      - name: Add Airoha offload sk_buff kernel patch
+        if: ${{ env.OPENWRT_REF == 'openwrt-24.10' }}
+        working-directory: ${{ env.SOURCE_DIR }}
+        run: |
+          set -eux
+          patch_file="target/linux/airoha/patches-6.6/999-fix-airoha-offload-skbuff-include.patch"
+          mkdir -p "$(dirname "${patch_file}")"
+          cat > "${patch_file}" <<'EOF'
+          --- a/include/linux/soc/airoha/airoha_offload.h
+          +++ b/include/linux/soc/airoha/airoha_offload.h
+          @@ -9,2 +9,3 @@
+           #include <linux/spinlock.h>
+          +#include <linux/skbuff.h>
+           #include <linux/workqueue.h>
+          EOF
+          grep -n -A8 -B2 'skbuff.h' "${patch_file}"
+
+      - name: Add Airoha PWM Linux 6.6 compatibility patch
+        if: ${{ env.OPENWRT_REF == 'openwrt-24.10' }}
+        working-directory: ${{ env.SOURCE_DIR }}
+        run: |
+          set -eux
+          patch_file="target/linux/airoha/patches-6.6/999-fix-airoha-pwm-linux66-api.patch"
+          mkdir -p "$(dirname "${patch_file}")"
+          cat > "${patch_file}" <<'EOF'
+          --- a/drivers/pwm/pwm-airoha.c
+          +++ b/drivers/pwm/pwm-airoha.c
+          @@ -26,6 +26,7 @@
+           #include <linux/platform_device.h>
+           #include <linux/pwm.h>
+           #include <linux/regmap.h>
+          +#include <linux/slab.h>
+           #include <linux/types.h>
+           
+           #define AIROHA_PWM_REG_SGPIO_LED_DATA		0x0024
+          @@ -88,6 +89,7 @@
+           };
+           
+           struct airoha_pwm {
+          +	struct pwm_chip chip;
+           	struct regmap *regmap;
+           
+           	DECLARE_BITMAP(initialized, AIROHA_PWM_MAX_CHANNELS);
+          @@ -97,6 +99,11 @@
+           	/* Cache bucket used by each pwm channel */
+           	u8 channel_bucket[AIROHA_PWM_MAX_CHANNELS];
+           };
+          +
+          +static inline struct airoha_pwm *to_airoha_pwm(struct pwm_chip *chip)
+          +{
+          +	return container_of(chip, struct airoha_pwm, chip);
+          +}
+           
+           /* The PWM hardware supports periods between 4 ms and 1 s */
+           #define AIROHA_PWM_PERIOD_TICK_NS	(4 * NSEC_PER_MSEC)
+          @@ -155,7 +162,7 @@
+           	 * and period_ns is clamped to AIROHA_PWM_PERIOD_MAX_NS and fit in a
+           	 * u64.
+           	 */
+          -	return DIV_U64_ROUND_UP(duty_tick * period_ns, AIROHA_PWM_DUTY_FULL);
+          +	return DIV64_U64_ROUND_UP(duty_tick * period_ns, AIROHA_PWM_DUTY_FULL);
+           }
+           
+           static int airoha_pwm_get_bucket(struct airoha_pwm *pc, int bucket,
+          @@ -505,7 +512,7 @@
+           static int airoha_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
+           			    const struct pwm_state *state)
+           {
+          -	struct airoha_pwm *pc = pwmchip_get_drvdata(chip);
+          +	struct airoha_pwm *pc = to_airoha_pwm(chip);
+           	u32 period_ticks, duty_ticks;
+           	u32 period_ns, duty_ns;
+           
+          @@ -546,7 +553,7 @@
+           static int airoha_pwm_get_state(struct pwm_chip *chip, struct pwm_device *pwm,
+           				struct pwm_state *state)
+           {
+          -	struct airoha_pwm *pc = pwmchip_get_drvdata(chip);
+          +	struct airoha_pwm *pc = to_airoha_pwm(chip);
+           	int ret, hwpwm = pwm->hwpwm;
+           	u32 addr, shift, val;
+           	u8 bucket;
+          @@ -580,12 +587,15 @@
+           	struct pwm_chip *chip;
+           	int ret;
+           
+          -	chip = devm_pwmchip_alloc(dev, AIROHA_PWM_MAX_CHANNELS, sizeof(*pc));
+          -	if (IS_ERR(chip))
+          -		return PTR_ERR(chip);
+          +	pc = devm_kzalloc(dev, sizeof(*pc), GFP_KERNEL);
+          +	if (!pc)
+          +		return -ENOMEM;
+           
+          +	chip = &pc->chip;
+          +	chip->dev = dev;
+           	chip->ops = &airoha_pwm_ops;
+          -	pc = pwmchip_get_drvdata(chip);
+          +	chip->npwm = AIROHA_PWM_MAX_CHANNELS;
+          +	chip->base = -1;
+           
+           	pc->regmap = device_node_to_regmap(dev_of_node(dev->parent));
+           	if (IS_ERR(pc->regmap))
+          EOF
+          grep -n -A8 -B2 'devm_kzalloc\|DIV64_U64_ROUND_UP' "${patch_file}"
+
       - name: Seed Airoha kernel config defaults
         working-directory: ${{ env.SOURCE_DIR }}
         run: |
