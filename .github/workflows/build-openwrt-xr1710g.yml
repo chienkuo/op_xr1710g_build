@@ -29,6 +29,11 @@ on:
         required: true
         type: boolean
         default: true
+      skip_cache:
+        description: Skip download and toolchain cache restore (fresh build)
+        required: false
+        type: boolean
+        default: false
       extra_config:
         description: Extra OpenWrt .config lines, one per line
         required: false
