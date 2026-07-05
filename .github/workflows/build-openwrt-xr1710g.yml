@@ -826,7 +826,7 @@ jobs:
           rm -rf dl/go-mod-cache
           echo "=== Go module cache cleared ==="
 
-- name: Download package sources
+      - name: Download package sources
         working-directory: ${{ env.SOURCE_DIR }}
         env:                                                               
           GONOSUMCHECK: "*"                                                 
