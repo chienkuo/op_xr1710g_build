@@ -848,7 +848,7 @@ jobs:
             grep -n 'GOFLAGS' "$target" || echo "GOFLAGS removed from unexport (pass-through enabled)"
           fi
 
-- name: Compile firmware
+      - name: Compile firmware
         working-directory: ${{ env.SOURCE_DIR }}
         env:                                                               
           GONOSUMCHECK: "*"                                                 
