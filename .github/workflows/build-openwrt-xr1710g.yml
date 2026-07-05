@@ -302,6 +302,30 @@ jobs:
           install -m 0644 "${support_dir}/target/linux/airoha/dts/an7581-gemtek-17xx-common.dtsi" target/linux/airoha/dts/
           mkdir -p target/linux/airoha/an7581/base-files
           cp -a "${support_dir}/target/linux/airoha/an7581/base-files/." target/linux/airoha/an7581/base-files/
+          if ! grep -q '^define Build/an7581-chainloader$' target/linux/airoha/image/an7581.mk; then
+            {
+              printf '\n'
+              awk '$0 == "define Build/an7581-chainloader" { show = 1 } show { print } $0 == "endef" && show { exit }' \
+                "${support_dir}/target/linux/airoha/image/an7581.mk"
+            } >> target/linux/airoha/image/an7581.mk
+          fi
+          if ! grep -q '^define Device/gemtek_17xx-common$' target/linux/airoha/image/an7581.mk; then
+            {
+              printf '\n'
+              awk '$0 == "define Device/gemtek_17xx-common" { show = 1 } show { print } $0 == "endef" && show { exit }' \
+                "${support_dir}/target/linux/airoha/image/an7581.mk"
+            } >> target/linux/airoha/image/an7581.mk
+          fi
+          {
+            printf '\n'
+            awk '$0 == "define Device/gemtek_xr1710g-ubi" { show = 1 } show { print } $0 == "TARGET_DEVICES += gemtek_xr1710g-ubi" && show { exit }' \
+              "${support_dir}/target/linux/airoha/image/an7581.mk"
+          } >> target/linux/airoha/image/an7581.mk
+
+          grep -q '^define Device/gemtek_xr1710g-ubi$' target/linux/airoha/image/an7581.mk
+          grep -q '^define Device/gemtek_17xx-common$' target/linux/airoha/image/an7581.mk
+          grep -q '^define Build/an7581-chainloader$' target/linux/airoha/image/an7581.mk
+          test -f target/linux/airoha/dts/an7581-npu-mt7996.dtsi
 
       - name: Align MTD partitions with XR1710G chainloader
         working-directory: ${{ env.SOURCE_DIR }}
@@ -428,30 +452,6 @@ jobs:
           grep -q 'label = "chainloader"' "${dts_file}"
           grep -q 'reg = <0x00700000 0x1d9c0000>' "${dts_file}"
           echo "MTD partitions aligned with XR1710G chainloader."
-          if ! grep -q '^define Build/an7581-chainloader$' target/linux/airoha/image/an7581.mk; then
-            {
-              printf '\n'
-              awk '$0 == "define Build/an7581-chainloader" { show = 1 } show { print } $0 == "endef" && show { exit }' \
-                "${support_dir}/target/linux/airoha/image/an7581.mk"
-            } >> target/linux/airoha/image/an7581.mk
-          fi
-          if ! grep -q '^define Device/gemtek_17xx-common$' target/linux/airoha/image/an7581.mk; then
-            {
-              printf '\n'
-              awk '$0 == "define Device/gemtek_17xx-common" { show = 1 } show { print } $0 == "endef" && show { exit }' \
-                "${support_dir}/target/linux/airoha/image/an7581.mk"
-            } >> target/linux/airoha/image/an7581.mk
-          fi
-          {
-            printf '\n'
-            awk '$0 == "define Device/gemtek_xr1710g-ubi" { show = 1 } show { print } $0 == "TARGET_DEVICES += gemtek_xr1710g-ubi" && show { exit }' \
-              "${support_dir}/target/linux/airoha/image/an7581.mk"
-          } >> target/linux/airoha/image/an7581.mk
-
-          grep -q '^define Device/gemtek_xr1710g-ubi$' target/linux/airoha/image/an7581.mk
-          grep -q '^define Device/gemtek_17xx-common$' target/linux/airoha/image/an7581.mk
-          grep -q '^define Build/an7581-chainloader$' target/linux/airoha/image/an7581.mk
-          test -f target/linux/airoha/dts/an7581-npu-mt7996.dtsi
 
       - name: Apply XR1710G reference device package overrides
         working-directory: ${{ env.SOURCE_DIR }}
