@@ -922,6 +922,8 @@ jobs:
           CONFIG_PACKAGE_nano=y
           CONFIG_PACKAGE_dnsmasq-full=y
           CONFIG_PACKAGE_ttyd=y
+          CONFIG_PACKAGE_kmod-mtd-rw=y
+          CONFIG_PACKAGE_nand-utils=y
           # CONFIG_TARGET_ROOTFS_INITRAMFS is not set
           EOF
 
@@ -942,7 +944,7 @@ jobs:
             grep "^CONFIG_TARGET_${TARGET}_${SUBTARGET}_DEVICE_" .config || true
             exit 1
           }
-          for pkg in luci-app-openclash luci-app-mlo luci-app-airoha-npu luci-app-w1700k-fancontrol  luci-proto-wireguard; do
+          for pkg in luci-app-openclash luci-app-mlo luci-app-airoha-npu luci-app-w1700k-fancontrol  luci-proto-wireguard kmod-mtd-rw nand-utils; do
             grep -q "^CONFIG_PACKAGE_${pkg}=y$" .config || {
               echo "Required package was not selected by OpenWrt Kconfig: ${pkg}"
               exit 1
