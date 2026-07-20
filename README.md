@@ -4,8 +4,8 @@ This repository contains a GitHub Actions workflow for building OpenWrt firmware
 
 The default build source is:
 
-- ImmortalWrt tree: `https://github.com/immortalwrt/immortalwrt.git`
-- Branch: `openwrt-24.10`
+- ImmortalWrt tree: `https://github.com/naoki66/ImmortalWrt-for-Gemtek-XR1710G.git`
+- Branch: `master`
 - Target: `airoha/an7581`
 - Device profile: `gemtek_xr1710g-ubi`
 
@@ -20,7 +20,7 @@ The default build source is:
 
 Successful firmware builds publish a GitHub Release containing firmware files and the exported OpenWrt `.config`.
 
-A source watcher workflow checks the ImmortalWrt `openwrt-24.10` branch once per hour. When the latest upstream commit does not already have matching toolchain, firmware, and package releases, it sends an `openwrt-updated` repository dispatch event to start the normal toolchain -> firmware/packages build chain. The watcher can also be run manually with `force_build` to rebuild even when matching releases already exist.
+A source watcher workflow checks the ImmortalWrt `master` branch (naoki66's XR1710G-specific fork) once per hour. When the latest upstream commit does not already have matching toolchain, firmware, and package releases, it sends an `openwrt-updated` repository dispatch event to start the normal toolchain -> firmware/packages build chain. The watcher can also be run manually with `force_build` to rebuild even when matching releases already exist.
 
 A separate toolchain workflow runs once per week, on repository dispatch, and after build workflow changes. It deletes matching old Actions cache keys at the start of the next toolchain run, then builds the OpenWrt host tools and target toolchain, saves the fresh toolchain into Actions cache, and uploads a profile-specific `openwrt-xr1710g-toolchain-*.tar.zst` archive to a GitHub Release. Automatic firmware and package builds run only after a successful toolchain build and first try to restore the matching toolchain from cache, then from the matching toolchain release. Manual firmware/package runs still attempt a normal OpenWrt build when no prebuilt toolchain is available.
 
@@ -50,7 +50,7 @@ The expected system firmware artifact is the `*-sysupgrade.itb` file. For XR1710
 
 ## References
 
-- ImmortalWrt source: <https://github.com/immortalwrt/immortalwrt/tree/openwrt-24.10>
+- ImmortalWrt source (XR1710G-specific fork): <https://github.com/naoki66/ImmortalWrt-for-Gemtek-XR1710G/tree/master>
 - Gemtek XR1710G OpenWrt PR overlay: <https://github.com/openwrt/openwrt/pull/22397>
 - W1700K UBI build workflow reference: <https://github.com/OpenWRT-fanboy/w1700k-ubi-build>
 - XR1710G U-Boot and HTTP Recovery notes: <https://github.com/YYH2913/http-uboot-xr1710g>

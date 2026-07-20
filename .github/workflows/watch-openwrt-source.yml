@@ -13,11 +13,11 @@ on:
       openwrt_repo:
         description: OpenWrt/ImmortalWrt source repository
         required: true
-        default: https://github.com/immortalwrt/immortalwrt.git
+        default: https://github.com/naoki66/ImmortalWrt-for-Gemtek-XR1710G.git
       openwrt_ref:
         description: OpenWrt branch, tag, or commit
         required: true
-        default: openwrt-25.12
+        default: master
       target_profile:
         description: OpenWrt device profile
         required: true
@@ -43,8 +43,8 @@ concurrency:
 
 env:
   GH_REPO: ${{ github.repository }}
-  OPENWRT_REPO: ${{ github.event.inputs.openwrt_repo || 'https://github.com/immortalwrt/immortalwrt.git' }}
-  OPENWRT_REF: ${{ github.event.inputs.openwrt_ref || 'openwrt-25.12' }}
+  OPENWRT_REPO: ${{ github.event.inputs.openwrt_repo || 'https://github.com/naoki66/ImmortalWrt-for-Gemtek-XR1710G.git' }}
+  OPENWRT_REF: ${{ github.event.inputs.openwrt_ref || 'master' }}
   TARGET_PROFILE: ${{ github.event.inputs.target_profile || 'gemtek_xr1710g-ubi' }}
   FORCE_BUILD: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.force_build) || 'false' }}
   CREATE_RELEASE: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.create_release) || 'true' }}
@@ -52,7 +52,7 @@ env:
 
 jobs:
   watch:
-    name: Watch ${{ github.event.inputs.openwrt_ref || 'openwrt-25.12' }}
+    name: Watch ${{ github.event.inputs.openwrt_ref || 'master' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
 
